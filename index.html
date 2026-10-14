@@ -214,7 +214,6 @@
           <div class="vote-line" aria-hidden="true"><div class="blue" id="boyVoteBar"></div><div class="pink" id="girlVoteBar"></div></div>
           <div class="vote-counts"><span>💙 કાનો: <strong id="boyVoteCount">0</strong> વોટ · <span id="boyVotePercent">0%</span></span><span>💗 રાધા: <strong id="girlVoteCount">0</strong> વોટ · <span id="girlVotePercent">0%</span></span></div>
           <p class="vote-total" id="totalVotes">કુલ ૦ વોટ</p>
-          <!--          <p style="font-size:10px;color:#a596af;text-align:center;margin:10px 0 0;">Voting counts powered by <a href="https://counterapi.com/" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">CounterAPI</a></p>-->
         </div>
       </div>
       <div class="rakhi-note" style="margin:24px auto 0;">
@@ -366,7 +365,7 @@
       document.getElementById('welcome').scrollIntoView({ behavior: 'smooth' });
     });
 
-    // Voting is initialized by the CounterAPI script below. This script contains invitation UI behavior.
+    // Voting is initialized by the Firebase module below. This script contains invitation UI behavior.
 
     window.addEventListener('scroll', () => {
       topButton.classList.toggle('show', window.scrollY > 450);
@@ -401,143 +400,119 @@
 
   </script>
 
-  <script>
-    // CounterAPI public voting: prefetch tally, instant feedback, preserve confirmed votes.
-    (function initCounterApiVoting() {
-      const NAMESPACE = 'simant-mihan-payal-2026-reset-20261014';
-      const ACTION = 'vote';
-      const LOCAL_VOTE_KEY = 'simant-sanskar-public-vote-reset-20261014';
-      const CACHE_KEY = 'simant-sanskar-tally-cache-reset-20261014';
-      const API_BASE = 'https://counterapi.com/api';
-      const POLL_INTERVAL_MS = 15000;
-      const voteButtons = [...document.querySelectorAll('.gender-option')];
-      const voteStatus = document.getElementById('voteStatus');
-      const voteResults = document.getElementById('voteResults');
-      const boyVoteCount = document.getElementById('boyVoteCount');
-      const girlVoteCount = document.getElementById('girlVoteCount');
-      const boyVotePercent = document.getElementById('boyVotePercent');
-      const girlVotePercent = document.getElementById('girlVotePercent');
-      const boyVoteBar = document.getElementById('boyVoteBar');
-      const girlVoteBar = document.getElementById('girlVoteBar');
-      const totalVotes = document.getElementById('totalVotes');
-      let myVote = readStoredVote();
-      let voteInProgress = false;
-      let refreshInProgress = false;
-      let cached = readCachedTally();
-      let confirmedFloor = null;
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js";
+    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-database.js";
 
-      function setStatus(message) { voteStatus.textContent = message; }
-      function readStoredVote() {
-        try { const v = localStorage.getItem(LOCAL_VOTE_KEY); return v === 'boy' || v === 'girl' ? v : null; }
-        catch (_) { return null; }
-      }
-      function saveVote(vote) {
-        try { localStorage.setItem(LOCAL_VOTE_KEY, vote); }
-        catch (error) { console.warn('Vote protection could not be saved in this browser', error); }
-      }
-      function readCachedTally() {
-        try {
-          const d = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
-          return d && Number.isSafeInteger(d.boy) && Number.isSafeInteger(d.girl) && d.boy >= 0 && d.girl >= 0 ? {boy:d.boy, girl:d.girl} : null;
-        } catch (_) { return null; }
-      }
-      function cacheTally(boy, girl) {
-        cached = {boy, girl};
-        try { localStorage.setItem(CACHE_KEY, JSON.stringify(cached)); } catch (_) {}
-      }
-      function setButtons() {
-        voteButtons.forEach(button => {
-          const selected = button.dataset.vote === myVote;
-          button.classList.toggle('selected', selected);
-          button.disabled = Boolean(myVote) || voteInProgress;
-          button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    const firebaseConfig = {
+      apiKey: "AIzaSyAxu-wXEuaLeBn3MMAcfQKhZ6PMlhueACI",
+      authDomain: "test-uspmilan0.firebaseapp.com",
+      databaseURL: "https://test-uspmilan0-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "test-uspmilan0",
+      storageBucket: "test-uspmilan0.firebasestorage.app",
+      messagingSenderId: "33727179315",
+      appId: "1:33727179315:web:4127e423a28dcd27c05146",
+      measurementId: "G-VLFJQX8CHH"
+    };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+    const votesRef = ref(db, 'invitationVotes');
+    const voteButtons = [...document.querySelectorAll('.gender-option')];
+    const voteStatus = document.getElementById('voteStatus');
+    const voteResults = document.getElementById('voteResults');
+    const boyVoteCount = document.getElementById('boyVoteCount');
+    const girlVoteCount = document.getElementById('girlVoteCount');
+    const boyVotePercent = document.getElementById('boyVotePercent');
+    const girlVotePercent = document.getElementById('girlVotePercent');
+    const boyVoteBar = document.getElementById('boyVoteBar');
+    const girlVoteBar = document.getElementById('girlVoteBar');
+    const totalVotes = document.getElementById('totalVotes');
+    let uid = null, myVote = null, voteInProgress = false, loadedVotes = false, connected = false;
+    let unsubscribe = null;
+
+    function showStatus(message) { voteStatus.textContent = message; }
+    function updateButtons() {
+      voteButtons.forEach(button => {
+        const selected = button.dataset.vote === myVote;
+        button.classList.toggle('selected', selected);
+        button.disabled = !connected || !loadedVotes || !!myVote || voteInProgress;
+        button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      });
+    }
+    function renderCounts(boy, girl) {
+      const total = boy + girl;
+      const boyPct = total ? Math.round(boy / total * 100) : 0;
+      const girlPct = total ? 100 - boyPct : 0;
+      boyVoteCount.textContent = boy.toLocaleString('gu-IN');
+      girlVoteCount.textContent = girl.toLocaleString('gu-IN');
+      boyVotePercent.textContent = `${boyPct}%`;
+      girlVotePercent.textContent = `${girlPct}%`;
+      boyVoteBar.style.width = `${boyPct}%`;
+      girlVoteBar.style.width = `${girlPct}%`;
+      totalVotes.textContent = `કુલ ${total.toLocaleString('gu-IN')} વોટ`;
+      voteResults.hidden = !myVote;
+    }
+    function connectVotes(user) {
+      uid = user.uid;
+      loadedVotes = false;
+      connected = false;
+      updateButtons();
+      if (unsubscribe) unsubscribe();
+      unsubscribe = onValue(votesRef, snapshot => {
+        let boy = 0, girl = 0;
+        const own = snapshot.child(uid).val();
+        if (!voteInProgress && (own === 'boy' || own === 'girl')) myVote = own;
+        snapshot.forEach(child => {
+          if (child.val() === 'boy') boy++;
+          else if (child.val() === 'girl') girl++;
         });
-      }
-      function counterUrl(key, readOnly) {
-        const base = `${API_BASE}/${encodeURIComponent(NAMESPACE)}/${encodeURIComponent(ACTION)}/${encodeURIComponent(key)}`;
-        return readOnly ? `${base}?readOnly=true` : base;
-      }
-      async function callCounter(key, readOnly) {
-        const response = await fetch(counterUrl(key, readOnly), {method:'GET', mode:'cors', cache:'no-store', headers:{Accept:'application/json'}});
-        if (!response.ok) throw new Error(`CounterAPI request failed (${response.status})`);
-        const result = await response.json();
-        const count = Number(result && result.value);
-        if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid CounterAPI value');
-        return count;
-      }
-      function renderResults(boy, girl) {
-        boy = Math.max(0, boy); girl = Math.max(0, girl);
-        const total = boy + girl;
-        const boyPct = total ? Math.round(boy / total * 100) : 0;
-        const girlPct = total ? 100 - boyPct : 0;
-        boyVoteCount.textContent = boy.toLocaleString('gu-IN');
-        girlVoteCount.textContent = girl.toLocaleString('gu-IN');
-        boyVotePercent.textContent = `${boyPct}%`;
-        girlVotePercent.textContent = `${girlPct}%`;
-        boyVoteBar.style.width = `${boyPct}%`;
-        girlVoteBar.style.width = `${girlPct}%`;
-        totalVotes.textContent = `કુલ ${total.toLocaleString('gu-IN')} વોટ`;
+        loadedVotes = true;
+        connected = true;
+        renderCounts(boy, girl);
+        if (myVote && !voteInProgress) showStatus(`તમારો અંદાજ “${myVote === 'boy' ? 'કાનો' : 'રાધા'}” નોંધાયો છે. આભાર 💜`);
+        else if (!voteInProgress) showStatus('તમારો અંદાજ પસંદ કરો 💜');
+        updateButtons();
+      }, error => {
+        console.error('Firebase voting read error:', error);
+        connected = false;
+        loadedVotes = false;
+        showStatus('Voting data લોડ નથી થઈ રહ્યો. Firebase Rules અથવા Internet તપાસો.');
+        updateButtons();
+      });
+    }
+    async function submitVote(vote, label) {
+      if (!uid || !connected || !loadedVotes || voteInProgress || myVote) return;
+      voteInProgress = true;
+      updateButtons();
+      showStatus(`“${label}” માટે તમારો વોટ નોંધાઈ રહ્યો છે…`);
+      try {
+        // Security rules only allow this authenticated UID to create a single immutable vote.
+        await set(ref(db, `invitationVotes/${uid}`), vote);
+        myVote = vote;
         voteResults.hidden = false;
+        showStatus(`તમારો વોટ “${label}” નોંધાઈ ગયો! આભાર 💜`);
+        updateButtons();
+        if (typeof celebrateInvitation === 'function') celebrateInvitation('vote');
+      } catch (error) {
+        console.error('Firebase voting write error:', error);
+        showStatus('વોટ નોંધાઈ શક્યો નથી. Internet અને Firebase Rules તપાસો.');
+      } finally {
+        voteInProgress = false;
+        updateButtons();
       }
-      async function fetchTally(showAfterVote = true) {
-        if (refreshInProgress || voteInProgress || document.visibilityState === 'hidden') return;
-        refreshInProgress = true;
-        try {
-          const [serverBoy, serverGirl] = await Promise.all([callCounter('kano-boy', true), callCounter('gopi-girl', true)]);
-          // Some servers briefly return older counts; never make the voter's displayed tally go backwards.
-          const boy = Math.max(serverBoy, confirmedFloor ? confirmedFloor.boy : 0);
-          const girl = Math.max(serverGirl, confirmedFloor ? confirmedFloor.girl : 0);
-          cacheTally(boy, girl);
-          if (myVote && showAfterVote) {
-            renderResults(boy, girl);
-            setStatus(`તમારો અંદાજ “${myVote === 'boy' ? 'કાનો' : 'રાધા'}” નોંધાયો છે. આભાર 💜`);
-          }
-        } catch (error) {
-          console.warn('Voting results temporarily unavailable:', error);
-          if (myVote && cached) renderResults(cached.boy, cached.girl);
-          if (myVote) setStatus('તમારો વોટ નોંધાયો છે. નવા પરિણામો લોડ કરવામાં થોડો સમય લાગી રહ્યો છે…');
-        } finally { refreshInProgress = false; }
-      }
-      async function submitVote(vote, label) {
-        if (voteInProgress || myVote) return;
-        // Instant tap response, with a clearly pending message until the server confirms.
-        voteInProgress = true;
-        setButtons();
-        setStatus(`“${label}” માટે તમારો વોટ નોંધાઈ રહ્યો છે…`);
-        try {
-          const newCount = await callCounter(vote === 'boy' ? 'kano-boy' : 'gopi-girl', false);
-          myVote = vote;
-          saveVote(vote);
-          // Use the increment response right away; don't wait for two additional network requests.
-          const boy = vote === 'boy' ? Math.max(newCount, cached ? cached.boy + 1 : 0) : (cached ? cached.boy : 0);
-          const girl = vote === 'girl' ? Math.max(newCount, cached ? cached.girl + 1 : 0) : (cached ? cached.girl : 0);
-          confirmedFloor = {boy, girl};
-          if (cached) {
-            cacheTally(boy, girl);
-            renderResults(boy, girl);
-          }
-          setStatus(`તમારો વોટ “${label}” નોંધાઈ ગયો! આભાર 💜`);
-          celebrateInvitation('vote');
-        } catch (error) {
-          console.error('Voting request failed or could not be confirmed:', error);
-          setStatus('વોટ નોંધાયો છે કે નહીં તેની ખાતરી થઈ નથી. Internet connection તપાસો. ફરી vote કરવાથી ડુપ્લિકેટ થઈ શકે છે.');
-        } finally {
-          voteInProgress = false;
-          setButtons();
-          if (myVote) fetchTally();
-        }
-      }
-      voteButtons.forEach(button => button.addEventListener('click', () => submitVote(button.dataset.vote, button.dataset.choice)));
-      setButtons();
-      if (myVote) {
-        if (cached) renderResults(cached.boy, cached.girl);
-        setStatus(cached ? `તમારો અંદાજ “${myVote === 'boy' ? 'કાનો' : 'રાધા'}” નોંધાયો છે. આભાર 💜` : 'તમારો પહેલાનો વોટ નોંધાયેલો છે. પરિણામો લોડ થઈ રહ્યાં છે…');
-      } else setStatus('તમારો અંદાજ પસંદ કરો 💜');
-      // Prefetch counts even before vote, but keep results private until this browser has voted.
-      fetchTally();
-      setInterval(() => fetchTally(), POLL_INTERVAL_MS);
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fetchTally(); });
-    })();
+    }
+    voteButtons.forEach(button => button.addEventListener('click', () => submitVote(button.dataset.vote, button.dataset.choice)));
+    showStatus('Voting જોડાઈ રહ્યું છે…');
+    updateButtons();
+    onAuthStateChanged(auth, user => {
+      if (user) connectVotes(user);
+      else signInAnonymously(auth).catch(error => {
+        console.error('Firebase Anonymous Auth error:', error);
+        showStatus('Voting શરૂ થઈ શકતું નથી. Firebase Anonymous Authentication Enable કરો.');
+      });
+    });
   </script>
 </body>
 </html>
