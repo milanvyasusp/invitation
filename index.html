@@ -144,6 +144,14 @@
     @keyframes rise { 0% { transform: translateY(0) rotate(-8deg); } 100% { transform: translateY(-120vh) rotate(12deg); } }
     @media (min-width: 600px) { body { padding: 22px 0; } .site { border-radius: 28px; } .hero { min-height: 780px; border-radius: 28px 28px 0 0; } .top-button { right: calc((100vw - 520px)/2 + 15px); } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+
+    /* Light, mobile-friendly invitation effects. */
+    .celebration-layer { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 25; }
+    .celebration-piece { position: absolute; top: -35px; width: 9px; height: 14px; border-radius: 3px; opacity: 0; will-change: transform, opacity; animation: invitation-confetti var(--fall-time, 3s) ease-out forwards; }
+    .celebration-piece.petal { width: 14px; height: 11px; border-radius: 85% 12% 85% 12%; }
+    .celebration-piece.sparkle { width: 9px; height: 9px; border-radius: 2px; transform: rotate(45deg); }
+    @keyframes invitation-confetti { 0% { opacity: 0; transform: translate3d(0,-15px,0) rotate(0deg) scale(.6); } 8% { opacity: .95; } 85% { opacity: .9; } 100% { opacity: 0; transform: translate3d(var(--drift, 35px), 105vh, 0) rotate(var(--spin, 540deg)) scale(.9); } }
+    @media (prefers-reduced-motion: reduce) { .celebration-piece { display: none !important; } }
   </style>
 </head>
 <body>
@@ -299,6 +307,7 @@
   </main>
   <button class="top-button" id="topButton" aria-label="ઉપર જાઓ" type="button">↑</button>
   <div class="balloon-layer" id="balloonLayer" aria-hidden="true"></div>
+  <div class="celebration-layer" id="celebrationLayer" aria-hidden="true"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script>
@@ -307,6 +316,28 @@
     const topButton = document.getElementById('topButton');
     const toast = document.getElementById('toast');
     let toastTimer;
+    const celebrationLayer = document.getElementById('celebrationLayer');
+    function celebrateInvitation(mode = 'welcome') {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.visibilityState === 'hidden') return;
+      const palette = ['#f3a8cc', '#d1a8f4', '#f6d98e', '#b6d9eb', '#f9c6b4', '#fff0bf'];
+      const count = mode === 'vote' ? 52 : 25;
+      const batch = document.createDocumentFragment();
+      for (let i = 0; i < count; i++) {
+        const piece = document.createElement('span');
+        piece.className = 'celebration-piece ' + (i % 3 === 0 ? 'petal' : i % 5 === 0 ? 'sparkle' : '');
+        piece.style.left = (2 + Math.random() * 96) + '%';
+        piece.style.backgroundColor = palette[i % palette.length];
+        piece.style.animationDelay = (Math.random() * (mode === 'vote' ? 0.5 : 1.5)) + 's';
+        piece.style.setProperty('--fall-time', (2.5 + Math.random() * 1.9) + 's');
+        piece.style.setProperty('--drift', ((Math.random() - .5) * 170) + 'px');
+        piece.style.setProperty('--spin', (360 + Math.round(Math.random() * 450)) + 'deg');
+        batch.appendChild(piece);
+        setTimeout(() => piece.remove(), 6100);
+      }
+      celebrationLayer.appendChild(batch);
+    }
+    window.addEventListener('load', () => setTimeout(() => celebrateInvitation('welcome'), 250), {once:true});
+
 
     function showToast(message) {
       toast.textContent = message;
@@ -371,15 +402,14 @@
   </script>
 
   <script>
-    // CounterAPI.com public counters. No account, API key, or Firebase setup is required.
-    // Keep this namespace unchanged so all visitors see the same public counts on test and production hosting.
+    // CounterAPI public voting: prefetch tally, instant feedback, preserve confirmed votes.
     (function initCounterApiVoting() {
-      const NAMESPACE = 'simant-mihan-payal-2026';
+      const NAMESPACE = 'simant-mihan-payal-2026-reset-20261014';
       const ACTION = 'vote';
-      const LOCAL_VOTE_KEY = 'simant-sanskar-public-vote-2026';
+      const LOCAL_VOTE_KEY = 'simant-sanskar-public-vote-reset-20261014';
+      const CACHE_KEY = 'simant-sanskar-tally-cache-reset-20261014';
       const API_BASE = 'https://counterapi.com/api';
       const POLL_INTERVAL_MS = 15000;
-
       const voteButtons = [...document.querySelectorAll('.gender-option')];
       const voteStatus = document.getElementById('voteStatus');
       const voteResults = document.getElementById('voteResults');
@@ -390,66 +420,56 @@
       const boyVoteBar = document.getElementById('boyVoteBar');
       const girlVoteBar = document.getElementById('girlVoteBar');
       const totalVotes = document.getElementById('totalVotes');
-
-      let myVote = getSavedVote();
+      let myVote = readStoredVote();
       let voteInProgress = false;
       let refreshInProgress = false;
+      let cached = readCachedTally();
+      let confirmedFloor = null;
 
-      function setStatus(message) {
-        voteStatus.textContent = message;
+      function setStatus(message) { voteStatus.textContent = message; }
+      function readStoredVote() {
+        try { const v = localStorage.getItem(LOCAL_VOTE_KEY); return v === 'boy' || v === 'girl' ? v : null; }
+        catch (_) { return null; }
       }
-
-      function getSavedVote() {
-        try {
-          const value = localStorage.getItem(LOCAL_VOTE_KEY);
-          return value === 'boy' || value === 'girl' ? value : null;
-        } catch (error) {
-          // Voting can still run if browser storage is unavailable, but repeat-vote protection is weaker.
-          return null;
-        }
-      }
-
       function saveVote(vote) {
         try { localStorage.setItem(LOCAL_VOTE_KEY, vote); }
-        catch (error) { console.warn('Browser storage unavailable; local repeat-vote protection may not persist.', error); }
+        catch (error) { console.warn('Vote protection could not be saved in this browser', error); }
       }
-
-      function showSelectedVote(vote) {
+      function readCachedTally() {
+        try {
+          const d = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+          return d && Number.isSafeInteger(d.boy) && Number.isSafeInteger(d.girl) && d.boy >= 0 && d.girl >= 0 ? {boy:d.boy, girl:d.girl} : null;
+        } catch (_) { return null; }
+      }
+      function cacheTally(boy, girl) {
+        cached = {boy, girl};
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify(cached)); } catch (_) {}
+      }
+      function setButtons() {
         voteButtons.forEach(button => {
-          const selected = button.dataset.vote === vote;
+          const selected = button.dataset.vote === myVote;
           button.classList.toggle('selected', selected);
-          button.disabled = Boolean(vote) || voteInProgress;
+          button.disabled = Boolean(myVote) || voteInProgress;
           button.setAttribute('aria-pressed', selected ? 'true' : 'false');
         });
       }
-
       function counterUrl(key, readOnly) {
         const base = `${API_BASE}/${encodeURIComponent(NAMESPACE)}/${encodeURIComponent(ACTION)}/${encodeURIComponent(key)}`;
         return readOnly ? `${base}?readOnly=true` : base;
       }
-
       async function callCounter(key, readOnly) {
-        const response = await fetch(counterUrl(key, readOnly), {
-          method: 'GET',
-          mode: 'cors',
-          cache: 'no-store',
-          headers: { 'Accept': 'application/json' }
-        });
+        const response = await fetch(counterUrl(key, readOnly), {method:'GET', mode:'cors', cache:'no-store', headers:{Accept:'application/json'}});
         if (!response.ok) throw new Error(`CounterAPI request failed (${response.status})`);
         const result = await response.json();
-        const value = Number(result && result.value);
-        if (!Number.isFinite(value) || value < 0) throw new Error('CounterAPI response did not contain a valid count.');
-        return Math.floor(value);
+        const count = Number(result && result.value);
+        if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid CounterAPI value');
+        return count;
       }
-
       function renderResults(boy, girl) {
-        // Results are intentionally hidden until this browser has cast a vote and successfully refreshed counts.
-        boy = Math.max(0, Number(boy) || 0);
-        girl = Math.max(0, Number(girl) || 0);
+        boy = Math.max(0, boy); girl = Math.max(0, girl);
         const total = boy + girl;
-        const boyPct = total ? Math.round((boy / total) * 100) : 0;
+        const boyPct = total ? Math.round(boy / total * 100) : 0;
         const girlPct = total ? 100 - boyPct : 0;
-
         boyVoteCount.textContent = boy.toLocaleString('gu-IN');
         girlVoteCount.textContent = girl.toLocaleString('gu-IN');
         boyVotePercent.textContent = `${boyPct}%`;
@@ -459,77 +479,64 @@
         totalVotes.textContent = `કુલ ${total.toLocaleString('gu-IN')} વોટ`;
         voteResults.hidden = false;
       }
-
-      async function refreshVotes() {
-        // Do not fetch or reveal the public tally before this browser has voted.
-        if (!myVote || refreshInProgress || document.visibilityState === 'hidden') return;
+      async function fetchTally(showAfterVote = true) {
+        if (refreshInProgress || voteInProgress || document.visibilityState === 'hidden') return;
         refreshInProgress = true;
         try {
-          const [boy, girl] = await Promise.all([
-            callCounter('kano-boy', true),
-            callCounter('gopi-girl', true)
-          ]);
-          renderResults(boy, girl);
-          if (myVote) {
+          const [serverBoy, serverGirl] = await Promise.all([callCounter('kano-boy', true), callCounter('gopi-girl', true)]);
+          // Some servers briefly return older counts; never make the voter's displayed tally go backwards.
+          const boy = Math.max(serverBoy, confirmedFloor ? confirmedFloor.boy : 0);
+          const girl = Math.max(serverGirl, confirmedFloor ? confirmedFloor.girl : 0);
+          cacheTally(boy, girl);
+          if (myVote && showAfterVote) {
+            renderResults(boy, girl);
             setStatus(`તમારો અંદાજ “${myVote === 'boy' ? 'કાનો' : 'રાધા'}” નોંધાયો છે. આભાર 💜`);
-          } else if (!voteInProgress) {
-            setStatus('તમારો અંદાજ પસંદ કરો 💜');
           }
         } catch (error) {
-          console.error('CounterAPI read error:', error);
-          if (myVote) {
-            setStatus('તમારો વોટ નોંધાયો છે, પરંતુ પરિણામો હમણાં લોડ થઈ શક્યા નથી. ફરી પ્રયાસ થઈ રહ્યો છે…');
-          } else if (!voteInProgress) {
-            setStatus('વોટના પરિણામો લોડ થઈ શક્યા નથી. ઇન્ટરનેટ કનેક્શન તપાસીને ફરી પ્રયાસ કરો.');
-          }
-        } finally {
-          refreshInProgress = false;
-        }
+          console.warn('Voting results temporarily unavailable:', error);
+          if (myVote && cached) renderResults(cached.boy, cached.girl);
+          if (myVote) setStatus('તમારો વોટ નોંધાયો છે. નવા પરિણામો લોડ કરવામાં થોડો સમય લાગી રહ્યો છે…');
+        } finally { refreshInProgress = false; }
       }
-
       async function submitVote(vote, label) {
-        if (voteInProgress) return;
-        myVote = getSavedVote();
-        if (myVote) {
-          showSelectedVote(myVote);
-          setStatus(`તમારો અંદાજ “${myVote === 'boy' ? 'કાનો' : 'રાધા'}” પહેલેથી પસંદ કરેલો છે. 💜`);
-          return;
-        }
-
+        if (voteInProgress || myVote) return;
+        // Instant tap response, with a clearly pending message until the server confirms.
         voteInProgress = true;
-        showSelectedVote(null);
-        setStatus('તમારો વોટ નોંધાઈ રહ્યો છે…');
+        setButtons();
+        setStatus(`“${label}” માટે તમારો વોટ નોંધાઈ રહ્યો છે…`);
         try {
-          // CounterAPI records this public vote. This service does not provide account-level identity checks.
-          await callCounter(vote === 'boy' ? 'kano-boy' : 'gopi-girl', false);
+          const newCount = await callCounter(vote === 'boy' ? 'kano-boy' : 'gopi-girl', false);
           myVote = vote;
           saveVote(vote);
-          showSelectedVote(myVote);
+          // Use the increment response right away; don't wait for two additional network requests.
+          const boy = vote === 'boy' ? Math.max(newCount, cached ? cached.boy + 1 : 0) : (cached ? cached.boy : 0);
+          const girl = vote === 'girl' ? Math.max(newCount, cached ? cached.girl + 1 : 0) : (cached ? cached.girl : 0);
+          confirmedFloor = {boy, girl};
+          if (cached) {
+            cacheTally(boy, girl);
+            renderResults(boy, girl);
+          }
           setStatus(`તમારો વોટ “${label}” નોંધાઈ ગયો! આભાર 💜`);
-          await refreshVotes();
+          celebrateInvitation('vote');
         } catch (error) {
-          console.error('CounterAPI vote error:', error);
-          setStatus('વોટ નોંધાઈ શક્યો નથી. થોડા સમય પછી ફરી પ્રયાસ કરો.');
-          showSelectedVote(null);
+          console.error('Voting request failed or could not be confirmed:', error);
+          setStatus('વોટ નોંધાયો છે કે નહીં તેની ખાતરી થઈ નથી. Internet connection તપાસો. ફરી vote કરવાથી ડુપ્લિકેટ થઈ શકે છે.');
         } finally {
           voteInProgress = false;
-          showSelectedVote(myVote);
+          setButtons();
+          if (myVote) fetchTally();
         }
       }
-
-      voteButtons.forEach(button => {
-        button.addEventListener('click', () => submitVote(button.dataset.vote, button.dataset.choice));
-      });
-
-      showSelectedVote(myVote);
-      setStatus(myVote
-        ? `તમારો અંદાજ “${myVote === 'boy' ? 'કાનો' : 'રાધા'}” પહેલેથી પસંદ કરેલો છે. પરિણામો લોડ થઈ રહ્યાં છે… 💜`
-        : 'તમારો અંદાજ પસંદ કરો 💜');
-      if (myVote) refreshVotes();
-      setInterval(refreshVotes, POLL_INTERVAL_MS);
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') refreshVotes();
-      });
+      voteButtons.forEach(button => button.addEventListener('click', () => submitVote(button.dataset.vote, button.dataset.choice)));
+      setButtons();
+      if (myVote) {
+        if (cached) renderResults(cached.boy, cached.girl);
+        setStatus(cached ? `તમારો અંદાજ “${myVote === 'boy' ? 'કાનો' : 'રાધા'}” નોંધાયો છે. આભાર 💜` : 'તમારો પહેલાનો વોટ નોંધાયેલો છે. પરિણામો લોડ થઈ રહ્યાં છે…');
+      } else setStatus('તમારો અંદાજ પસંદ કરો 💜');
+      // Prefetch counts even before vote, but keep results private until this browser has voted.
+      fetchTally();
+      setInterval(() => fetchTally(), POLL_INTERVAL_MS);
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fetchTally(); });
     })();
   </script>
 </body>
