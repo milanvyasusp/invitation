@@ -105,8 +105,6 @@
     .gender-option:disabled { cursor: wait; opacity: .7; }
     .gender-option.selected:disabled { opacity: 1; }
     .vote-hint { margin: 10px 0 0; text-align: center; font-size: 12px; line-height: 1.7; color: #9274a4; }
-    .vote-selected-view { width: fit-content; max-width: 100%; margin: 18px auto 3px; padding: 13px 22px; border-radius: 16px; border: 1.5px solid currentColor; text-align: center; font-weight: 800; }
-    .vote-selected-view .vote-selected-icon { font-size: 27px; display: block; margin-bottom: 3px; }
     .vote-loading { text-align: center; color: #8c719d; font-size: 13px; padding: 10px 4px 0; }
 
     .vote-status { min-height: 26px; color: var(--violet); text-align: center; font-size: 13px; margin: 16px 0 0; font-weight: 700; }
@@ -231,10 +229,6 @@
           <button type="button" class="gender-option girl" data-choice="રાધા" data-vote="girl" disabled><span>👧🏻</span>રાધા<small>GIRL 💗</small></button>
         </div>
         <p class="vote-hint" id="voteHint" hidden>બીજા વિકલ્પ પર ટૅપ કરીને વોટ બદલો અથવા પસંદ કરેલા વિકલ્પ પર ફરી ટૅપ કરીને વોટ દૂર કરો.</p>
-        <div class="vote-selected-view" id="voteSelected" hidden>
-          <span class="vote-selected-icon" id="voteSelectedIcon" aria-hidden="true"></span>
-          <span id="voteSelectedLabel"></span>
-        </div>
         <p class="vote-status" id="voteStatus" aria-live="polite">વોટની માહિતી લોડ થઈ રહી છે…</p>
         <div id="voteResults" hidden>
           <p class="vote-loading" id="voteLoading">Live વોટના પરિણામો લોડ થઈ રહ્યાં છે…</p>
@@ -257,11 +251,6 @@
             button.classList.toggle('selected', selected);
             button.setAttribute('aria-pressed', String(selected));
           });
-          const selected = document.getElementById('voteSelected');
-          selected.classList.add(vote === 'boy' ? 'boy' : 'girl');
-          document.getElementById('voteSelectedIcon').textContent = vote === 'boy' ? '👶🏻 💙' : '👧🏻 💗';
-          document.getElementById('voteSelectedLabel').textContent = vote === 'boy' ? 'તમારી પસંદગી: કાનો' : 'તમારી પસંદગી: રાધા';
-          selected.hidden = false;
           document.getElementById('voteResults').hidden = false;
           document.getElementById('voteStatus').textContent = 'તમારો વોટ સેવ છે. Live પરિણામો લોડ થઈ રહ્યાં છે… 💜';
         })();
@@ -476,9 +465,6 @@
     const voteChoices = document.getElementById('voteChoices');
     const voteInstruction = document.getElementById('voteInstruction');
     const voteHint = document.getElementById('voteHint');
-    const voteSelected = document.getElementById('voteSelected');
-    const voteSelectedIcon = document.getElementById('voteSelectedIcon');
-    const voteSelectedLabel = document.getElementById('voteSelectedLabel');
     const voteStatus = document.getElementById('voteStatus');
     const voteResults = document.getElementById('voteResults');
     const voteLoading = document.getElementById('voteLoading');
@@ -533,16 +519,7 @@
       voteChoices.hidden = false;
       voteInstruction.hidden = false;
       voteHint.hidden = !hasVoted;
-      voteSelected.hidden = !hasVoted;
       voteResults.hidden = !hasVoted;
-      if (hasVoted) {
-        voteSelected.classList.toggle('boy', myVote === 'boy');
-        voteSelected.classList.toggle('girl', myVote === 'girl');
-        voteSelectedIcon.textContent = myVote === 'boy' ? '👶🏻 💙' : '👧🏻 💗';
-        voteSelectedLabel.textContent = `તમારી પસંદગી: ${labelFor(myVote)}`;
-      } else {
-        voteSelected.classList.remove('boy', 'girl');
-      }
       voteButtons.forEach(button => {
         const chosen = hasVoted && button.dataset.vote === myVote;
         button.classList.toggle('selected', chosen);
