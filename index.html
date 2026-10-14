@@ -4,6 +4,20 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#f4eaff" />
+  <!-- Restore the vote before loading external Firebase modules, so choices do not flash on revisit. -->
+  <script>
+    window.readInvitationVote = function () {
+      try {
+        const raw = localStorage.getItem('simant-sanskar-public-vote-reset-20261014');
+        if (raw === 'boy' || raw === 'girl') return raw;
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        const choice = typeof parsed === 'string' ? parsed : (parsed && (parsed.vote || parsed.choice || parsed.selectedVote));
+        return choice === 'boy' || choice === 'girl' ? choice : null;
+      } catch (_) { return null; }
+    };
+    if (window.readInvitationVote()) document.documentElement.classList.add('has-invitation-vote');
+  </script>
   <title>સીમંત સંસ્કાર | ભાવભર્યું આમંત્રણ</title>
   <style>
     :root {
@@ -88,6 +102,11 @@
     .gender-option small { display: block; font-size: 11px; margin-top: 3px; letter-spacing: .05em; }
     .boy { background: #edf1ff; color: #667db3; } .girl { background: #fff0f5; color: #c16f93; }
     .gender-option.selected { border-color: currentColor; transform: translateY(-3px); box-shadow: 0 7px 18px rgba(95, 65, 122, .12); }
+    html.has-invitation-vote #voteChoices, html.has-invitation-vote #voteInstruction { display: none !important; }
+    .vote-selected-view { width: fit-content; max-width: 100%; margin: 18px auto 3px; padding: 13px 22px; border-radius: 16px; border: 1.5px solid currentColor; text-align: center; font-weight: 800; }
+    .vote-selected-view .vote-selected-icon { font-size: 27px; display: block; margin-bottom: 3px; }
+    .vote-loading { text-align: center; color: #8c719d; font-size: 13px; padding: 10px 4px 0; }
+
     .vote-status { min-height: 26px; color: var(--violet); text-align: center; font-size: 13px; margin: 16px 0 0; font-weight: 700; }
     .vote-line { display: flex; height: 7px; background: #f4dce9; border-radius: 99px; overflow: hidden; margin: 14px 0 5px; }
     .vote-line .blue { width: 0%; background: #7896dc; transition: width .35s ease; } .vote-line .pink { width: 0%; background: #e58cb3; transition: width .35s ease; }
@@ -204,18 +223,40 @@
       <h2>કાનો કે રાધા?</h2>
       <div class="ornament">✦</div>
       <div class="card gender-card">
-           <p class="intro-copy" style="font-size:14px;margin:0;">બાળકના આગમનની મજેદાર અટકળ કરો!<br>તમારો અંદાજ પસંદ કરો:</p>
-        <div class="gender-options">
+           <p class="intro-copy" id="voteInstruction" style="font-size:14px;margin:0;">બાળકના આગમનની મજેદાર અટકળ કરો!<br>તમારો અંદાજ પસંદ કરો:</p>
+        <div class="gender-options" id="voteChoices">
           <button type="button" class="gender-option boy" data-choice="કાનો" data-vote="boy"><span>👶🏻</span>કાનો<small>BOY 💙</small></button>
           <button type="button" class="gender-option girl" data-choice="રાધા" data-vote="girl"><span>👧🏻</span>રાધા<small>GIRL 💗</small></button>
         </div>
-        <p class="vote-status" id="voteStatus" aria-live="polite">તમારો અંદાજ પસંદ કરો 💜</p>
+        <div class="vote-selected-view" id="voteSelected" hidden>
+          <span class="vote-selected-icon" id="voteSelectedIcon" aria-hidden="true"></span>
+          <span id="voteSelectedLabel"></span>
+        </div>
+        <p class="vote-status" id="voteStatus" aria-live="polite">વોટની માહિતી લોડ થઈ રહી છે…</p>
         <div id="voteResults" hidden>
-          <div class="vote-line" aria-hidden="true"><div class="blue" id="boyVoteBar"></div><div class="pink" id="girlVoteBar"></div></div>
-          <div class="vote-counts"><span>💙 કાનો: <strong id="boyVoteCount">0</strong> વોટ · <span id="boyVotePercent">0%</span></span><span>💗 રાધા: <strong id="girlVoteCount">0</strong> વોટ · <span id="girlVotePercent">0%</span></span></div>
-          <p class="vote-total" id="totalVotes">કુલ ૦ વોટ</p>
+          <p class="vote-loading" id="voteLoading">Live વોટના પરિણામો લોડ થઈ રહ્યાં છે…</p>
+          <div id="voteCountsContent" hidden>
+            <div class="vote-line" aria-hidden="true"><div class="blue" id="boyVoteBar"></div><div class="pink" id="girlVoteBar"></div></div>
+            <div class="vote-counts"><span>💙 કાનો: <strong id="boyVoteCount">0</strong> વોટ · <span id="boyVotePercent">0%</span></span><span>💗 રાધા: <strong id="girlVoteCount">0</strong> વોટ · <span id="girlVotePercent">0%</span></span></div>
+            <p class="vote-total" id="totalVotes">કુલ ૦ વોટ</p>
+          </div>
         </div>
       </div>
+      <script>
+        (function () {
+          const vote = window.readInvitationVote();
+          if (!vote) return;
+          document.getElementById('voteInstruction').hidden = true;
+          document.getElementById('voteChoices').hidden = true;
+          const selected = document.getElementById('voteSelected');
+          selected.classList.add(vote === 'boy' ? 'boy' : 'girl');
+          document.getElementById('voteSelectedIcon').textContent = vote === 'boy' ? '👶🏻 💙' : '👧🏻 💗';
+          document.getElementById('voteSelectedLabel').textContent = vote === 'boy' ? 'તમારી પસંદગી: કાનો' : 'તમારી પસંદગી: રાધા';
+          selected.hidden = false;
+          document.getElementById('voteResults').hidden = false;
+          document.getElementById('voteStatus').textContent = 'તમારો વોટ સેવ છે. Live પરિણામો લોડ થઈ રહ્યાં છે… 💜';
+        })();
+      </script>
       <div class="rakhi-note" style="margin:24px auto 0;">
         <p>॥ રૂડી રાખડી લાવશો ॥</p>
         <span>કુ. અર્ચનાબેન પ્રવિણભાઈ વ્યાસ</span>
@@ -415,13 +456,23 @@
       appId: "1:33727179315:web:4127e423a28dcd27c05146",
       measurementId: "G-VLFJQX8CHH"
     };
+
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getDatabase(app);
     const votesRef = ref(db, 'invitationVotes');
+
+    const LOCAL_VOTE_KEY = 'simant-sanskar-public-vote-reset-20261014';
     const voteButtons = [...document.querySelectorAll('.gender-option')];
+    const voteChoices = document.getElementById('voteChoices');
+    const voteInstruction = document.getElementById('voteInstruction');
+    const voteSelected = document.getElementById('voteSelected');
+    const voteSelectedIcon = document.getElementById('voteSelectedIcon');
+    const voteSelectedLabel = document.getElementById('voteSelectedLabel');
     const voteStatus = document.getElementById('voteStatus');
     const voteResults = document.getElementById('voteResults');
+    const voteLoading = document.getElementById('voteLoading');
+    const voteCountsContent = document.getElementById('voteCountsContent');
     const boyVoteCount = document.getElementById('boyVoteCount');
     const girlVoteCount = document.getElementById('girlVoteCount');
     const boyVotePercent = document.getElementById('boyVotePercent');
@@ -429,114 +480,140 @@
     const boyVoteBar = document.getElementById('boyVoteBar');
     const girlVoteBar = document.getElementById('girlVoteBar');
     const totalVotes = document.getElementById('totalVotes');
-    const LOCAL_VOTE_KEY = 'simant-sanskar-firebase-vote-v1';
-    const LOCAL_COUNTS_KEY = 'simant-sanskar-firebase-counts-v1';
-    function readStored(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
-    function writeStored(key, value) { try { localStorage.setItem(key, value); } catch (_) {} }
-    function validChoice(value) { return value === 'boy' || value === 'girl'; }
-    function getSavedVote() { const vote = readStored(LOCAL_VOTE_KEY); return validChoice(vote) ? vote : null; }
 
-    let uid = null, myVote = getSavedVote(), voteInProgress = false, loadedVotes = false, connected = false;
+    // Exactly two sources of voting information:
+    // 1. LocalStorage: this browser's saved choice (the only UI visibility gate).
+    // 2. Firebase onValue: current, real-time Boy/Girl totals (loaded for every visitor).
+    let myVote = window.readInvitationVote();
+    let firebaseTotals = null;
+    let uid = null, readyToVote = false, voteInProgress = false;
     let unsubscribe = null;
 
-    function showStatus(message) { voteStatus.textContent = message; }
-    function selectedLabel(vote) { return vote === 'boy' ? 'કાનો' : 'રાધા'; }
-    function updateButtons() {
-      voteButtons.forEach(button => {
-        const selected = button.dataset.vote === myVote;
-        button.classList.toggle('selected', selected);
-        button.disabled = !connected || !loadedVotes || !!myVote || voteInProgress;
-        button.setAttribute('aria-pressed', selected ? 'true' : 'false');
-      });
+    function labelFor(vote) { return vote === 'boy' ? 'કાનો' : 'રાધા'; }
+    function validVote(vote) { return vote === 'boy' || vote === 'girl'; }
+    function saveVote(vote) {
+      try { localStorage.setItem(LOCAL_VOTE_KEY, vote); }
+      catch (error) { console.warn('Vote could not be saved to browser storage.', error); }
+      myVote = vote;
     }
-    function renderCounts(boy, girl) {
+
+    function renderTotals() {
+      // Live Firebase data is kept in memory and never confused with the local choice.
+      const hasTotals = firebaseTotals !== null;
+      voteLoading.hidden = hasTotals;
+      voteCountsContent.hidden = !hasTotals;
+      if (!hasTotals) return;
+      const { boy, girl } = firebaseTotals;
       const total = boy + girl;
-      const boyPct = total ? Math.round(boy / total * 100) : 0;
-      const girlPct = total ? 100 - boyPct : 0;
+      const boyPercent = total ? Math.round((boy / total) * 100) : 0;
+      const girlPercent = total ? 100 - boyPercent : 0;
       boyVoteCount.textContent = boy.toLocaleString('gu-IN');
       girlVoteCount.textContent = girl.toLocaleString('gu-IN');
-      boyVotePercent.textContent = `${boyPct}%`;
-      girlVotePercent.textContent = `${girlPct}%`;
-      boyVoteBar.style.width = `${boyPct}%`;
-      girlVoteBar.style.width = `${girlPct}%`;
+      boyVotePercent.textContent = `${boyPercent}%`;
+      girlVotePercent.textContent = `${girlPercent}%`;
+      boyVoteBar.style.width = `${boyPercent}%`;
+      girlVoteBar.style.width = `${girlPercent}%`;
       totalVotes.textContent = `કુલ ${total.toLocaleString('gu-IN')} વોટ`;
-      voteResults.hidden = !myVote;
     }
-    function renderCachedCounts() {
-      const cached = readStored(LOCAL_COUNTS_KEY);
-      if (!cached) return;
-      try {
-        const { boy, girl } = JSON.parse(cached);
-        if (Number.isInteger(boy) && boy >= 0 && Number.isInteger(girl) && girl >= 0) renderCounts(boy, girl);
-      } catch (_) {}
+
+    function renderVoteUI() {
+      const hasVoted = validVote(myVote);
+      // Read the saved choice first. Firebase response may arrive much later.
+      document.documentElement.classList.toggle('has-invitation-vote', hasVoted);
+      voteInstruction.hidden = hasVoted;
+      voteChoices.hidden = hasVoted;
+      voteSelected.hidden = !hasVoted;
+      voteResults.hidden = !hasVoted;
+      if (hasVoted) {
+        voteSelected.classList.toggle('boy', myVote === 'boy');
+        voteSelected.classList.toggle('girl', myVote === 'girl');
+        voteSelectedIcon.textContent = myVote === 'boy' ? '👶🏻 💙' : '👧🏻 💗';
+        voteSelectedLabel.textContent = `તમારી પસંદગી: ${labelFor(myVote)}`;
+      }
+      voteButtons.forEach(button => {
+        const chosen = hasVoted && button.dataset.vote === myVote;
+        button.classList.toggle('selected', chosen);
+        button.disabled = hasVoted || !readyToVote || voteInProgress;
+        button.setAttribute('aria-pressed', chosen ? 'true' : 'false');
+      });
+      renderTotals();
     }
-    function connectVotes(user) {
+
+    function connectVoting(user) {
       uid = user.uid;
-      loadedVotes = false;
-      connected = false;
-      updateButtons();
+      readyToVote = false;
+      firebaseTotals = null;
+      renderVoteUI();
       if (unsubscribe) unsubscribe();
+
+      // Subscribe on EVERY page load, whether localStorage has a vote or not.
       unsubscribe = onValue(votesRef, snapshot => {
         let boy = 0, girl = 0;
-        const own = snapshot.child(uid).val();
-        if (validChoice(own)) {
-          myVote = own;
-          writeStored(LOCAL_VOTE_KEY, own);
-        }
         snapshot.forEach(child => {
           if (child.val() === 'boy') boy++;
-          else if (child.val() === 'girl') girl++;
+          if (child.val() === 'girl') girl++;
         });
-        loadedVotes = true;
-        connected = true;
-        writeStored(LOCAL_COUNTS_KEY, JSON.stringify({ boy, girl }));
-        renderCounts(boy, girl);
+        firebaseTotals = { boy, girl };
+        readyToVote = true;
+
+        // Recovery only: if Firebase remembers this anonymous account but LocalStorage
+        // was removed, restore that proven vote into the requested LocalStorage key.
+        const recordedChoice = snapshot.child(uid).val();
+        if (!myVote && validVote(recordedChoice)) saveVote(recordedChoice);
+
+        renderVoteUI();
         if (!voteInProgress) {
-          if (validChoice(own)) showStatus(`તમારો અંદાજ “${selectedLabel(myVote)}” નોંધાયો છે. આભાર 💜`);
-          else if (myVote) showStatus(`“${selectedLabel(myVote)}” આ બ્રાઉઝરમાં સેવ છે, પરંતુ આ Firebase account માં વોટ મળ્યો નથી. પરિણામો Live છે.`);
-          else showStatus('તમારો અંદાજ પસંદ કરો 💜');
+          voteStatus.textContent = myVote
+            ? `તમારો અંદાજ “${labelFor(myVote)}” સેવ છે. Live પરિણામો અપડેટ થયાં છે. 💜`
+            : 'તમારો અંદાજ પસંદ કરો 💜';
         }
-        updateButtons();
       }, error => {
         console.error('Firebase voting read error:', error);
-        connected = false;
-        loadedVotes = false;
-        showStatus(myVote ? `તમારી પસંદગી “${selectedLabel(myVote)}” સેવ છે. Live પરિણામો હાલ લોડ નથી થઈ રહ્યાં.` : 'Voting data લોડ નથી થઈ રહ્યો. Firebase Rules અથવા Internet તપાસો.');
-        updateButtons();
+        readyToVote = false;
+        firebaseTotals = null;
+        renderVoteUI();
+        voteStatus.textContent = myVote
+          ? `તમારો અંદાજ “${labelFor(myVote)}” સેવ છે. Live પરિણામો હમણાં લોડ નથી થઈ રહ્યાં.`
+          : 'Voting data લોડ નથી થઈ રહ્યો. Firebase Rules અથવા Internet તપાસો.';
       });
     }
-    async function submitVote(vote, label) {
-      if (!uid || !connected || !loadedVotes || voteInProgress || myVote) return;
+
+    async function submitVote(choice) {
+      // No second vote is possible while a browser choice exists.
+      if (!validVote(choice) || !uid || !readyToVote || voteInProgress || myVote) return;
       voteInProgress = true;
-      updateButtons();
-      showStatus(`“${label}” માટે તમારો વોટ નોંધાઈ રહ્યો છે…`);
+      renderVoteUI();
+      voteStatus.textContent = `“${labelFor(choice)}” માટે તમારો વોટ નોંધાઈ રહ્યો છે…`;
       try {
-        // Rules allow each authenticated Firebase UID to create only one immutable vote.
-        await set(ref(db, `invitationVotes/${uid}`), vote);
-        myVote = vote;
-        writeStored(LOCAL_VOTE_KEY, vote);
-        voteResults.hidden = false;
-        showStatus(`તમારો વોટ “${label}” નોંધાઈ ગયો! આભાર 💜`);
-        updateButtons();
+        // Firebase rules still enforce one immutable vote per anonymous account.
+        await set(ref(db, `invitationVotes/${uid}`), choice);
+        saveVote(choice);
+        renderVoteUI();
+        voteStatus.textContent = `તમારો વોટ “${labelFor(choice)}” નોંધાઈ ગયો! આભાર 💜`;
         if (typeof celebrateInvitation === 'function') celebrateInvitation('vote');
       } catch (error) {
         console.error('Firebase voting write error:', error);
-        showStatus('વોટ નોંધાઈ શક્યો નથી. Internet અને Firebase Rules તપાસો.');
+        voteStatus.textContent = 'વોટ નોંધાઈ શક્યો નથી. Internet અને Firebase Rules તપાસો.';
       } finally {
         voteInProgress = false;
-        updateButtons();
+        renderVoteUI();
       }
     }
-    voteButtons.forEach(button => button.addEventListener('click', () => submitVote(button.dataset.vote, button.dataset.choice)));
-    // Restore the local choice before Firebase/Auth finishes loading.
-    renderCachedCounts();
-    showStatus(myVote ? `તમારો અંદાજ “${selectedLabel(myVote)}” સેવ છે. Live પરિણામો લોડ થઈ રહ્યાં છે… 💜` : 'Voting જોડાઈ રહ્યું છે…');
-    updateButtons();
+
+    voteButtons.forEach(button => button.addEventListener('click', () => submitVote(button.dataset.vote)));
+    renderVoteUI();
+    voteStatus.textContent = myVote
+      ? `તમારો અંદાજ “${labelFor(myVote)}” સેવ છે. Live પરિણામો લોડ થઈ રહ્યાં છે… 💜`
+      : 'Voting data લોડ થઈ રહ્યો છે…';
     onAuthStateChanged(auth, user => {
-      if (user) connectVotes(user);
+      if (user) connectVoting(user);
       else signInAnonymously(auth).catch(error => {
         console.error('Firebase Anonymous Auth error:', error);
-        showStatus(myVote ? `તમારી પસંદગી “${selectedLabel(myVote)}” સેવ છે. Firebase જોડાઈ શક્યું નથી.` : 'Voting શરૂ થઈ શકતું નથી. Firebase Anonymous Authentication Enable કરો.');
+        readyToVote = false;
+        renderVoteUI();
+        voteStatus.textContent = myVote
+          ? `તમારી પસંદગી સેવ છે, પરંતુ Firebase જોડાઈ શક્યું નથી.`
+          : 'Firebase Anonymous Authentication Enable કરો અને ફરી પ્રયાસ કરો.';
       });
     });
   </script>
