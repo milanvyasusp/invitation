@@ -429,10 +429,18 @@
     const boyVoteBar = document.getElementById('boyVoteBar');
     const girlVoteBar = document.getElementById('girlVoteBar');
     const totalVotes = document.getElementById('totalVotes');
-    let uid = null, myVote = null, voteInProgress = false, loadedVotes = false, connected = false;
+    const LOCAL_VOTE_KEY = 'simant-sanskar-firebase-vote-v1';
+    const LOCAL_COUNTS_KEY = 'simant-sanskar-firebase-counts-v1';
+    function readStored(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
+    function writeStored(key, value) { try { localStorage.setItem(key, value); } catch (_) {} }
+    function validChoice(value) { return value === 'boy' || value === 'girl'; }
+    function getSavedVote() { const vote = readStored(LOCAL_VOTE_KEY); return validChoice(vote) ? vote : null; }
+
+    let uid = null, myVote = getSavedVote(), voteInProgress = false, loadedVotes = false, connected = false;
     let unsubscribe = null;
 
     function showStatus(message) { voteStatus.textContent = message; }
+    function selectedLabel(vote) { return vote === 'boy' ? 'કાનો' : 'રાધા'; }
     function updateButtons() {
       voteButtons.forEach(button => {
         const selected = button.dataset.vote === myVote;
@@ -454,6 +462,14 @@
       totalVotes.textContent = `કુલ ${total.toLocaleString('gu-IN')} વોટ`;
       voteResults.hidden = !myVote;
     }
+    function renderCachedCounts() {
+      const cached = readStored(LOCAL_COUNTS_KEY);
+      if (!cached) return;
+      try {
+        const { boy, girl } = JSON.parse(cached);
+        if (Number.isInteger(boy) && boy >= 0 && Number.isInteger(girl) && girl >= 0) renderCounts(boy, girl);
+      } catch (_) {}
+    }
     function connectVotes(user) {
       uid = user.uid;
       loadedVotes = false;
@@ -463,22 +479,29 @@
       unsubscribe = onValue(votesRef, snapshot => {
         let boy = 0, girl = 0;
         const own = snapshot.child(uid).val();
-        if (!voteInProgress && (own === 'boy' || own === 'girl')) myVote = own;
+        if (validChoice(own)) {
+          myVote = own;
+          writeStored(LOCAL_VOTE_KEY, own);
+        }
         snapshot.forEach(child => {
           if (child.val() === 'boy') boy++;
           else if (child.val() === 'girl') girl++;
         });
         loadedVotes = true;
         connected = true;
+        writeStored(LOCAL_COUNTS_KEY, JSON.stringify({ boy, girl }));
         renderCounts(boy, girl);
-        if (myVote && !voteInProgress) showStatus(`તમારો અંદાજ “${myVote === 'boy' ? 'કાનો' : 'રાધા'}” નોંધાયો છે. આભાર 💜`);
-        else if (!voteInProgress) showStatus('તમારો અંદાજ પસંદ કરો 💜');
+        if (!voteInProgress) {
+          if (validChoice(own)) showStatus(`તમારો અંદાજ “${selectedLabel(myVote)}” નોંધાયો છે. આભાર 💜`);
+          else if (myVote) showStatus(`“${selectedLabel(myVote)}” આ બ્રાઉઝરમાં સેવ છે, પરંતુ આ Firebase account માં વોટ મળ્યો નથી. પરિણામો Live છે.`);
+          else showStatus('તમારો અંદાજ પસંદ કરો 💜');
+        }
         updateButtons();
       }, error => {
         console.error('Firebase voting read error:', error);
         connected = false;
         loadedVotes = false;
-        showStatus('Voting data લોડ નથી થઈ રહ્યો. Firebase Rules અથવા Internet તપાસો.');
+        showStatus(myVote ? `તમારી પસંદગી “${selectedLabel(myVote)}” સેવ છે. Live પરિણામો હાલ લોડ નથી થઈ રહ્યાં.` : 'Voting data લોડ નથી થઈ રહ્યો. Firebase Rules અથવા Internet તપાસો.');
         updateButtons();
       });
     }
@@ -488,9 +511,10 @@
       updateButtons();
       showStatus(`“${label}” માટે તમારો વોટ નોંધાઈ રહ્યો છે…`);
       try {
-        // Security rules only allow this authenticated UID to create a single immutable vote.
+        // Rules allow each authenticated Firebase UID to create only one immutable vote.
         await set(ref(db, `invitationVotes/${uid}`), vote);
         myVote = vote;
+        writeStored(LOCAL_VOTE_KEY, vote);
         voteResults.hidden = false;
         showStatus(`તમારો વોટ “${label}” નોંધાઈ ગયો! આભાર 💜`);
         updateButtons();
@@ -504,13 +528,15 @@
       }
     }
     voteButtons.forEach(button => button.addEventListener('click', () => submitVote(button.dataset.vote, button.dataset.choice)));
-    showStatus('Voting જોડાઈ રહ્યું છે…');
+    // Restore the local choice before Firebase/Auth finishes loading.
+    renderCachedCounts();
+    showStatus(myVote ? `તમારો અંદાજ “${selectedLabel(myVote)}” સેવ છે. Live પરિણામો લોડ થઈ રહ્યાં છે… 💜` : 'Voting જોડાઈ રહ્યું છે…');
     updateButtons();
     onAuthStateChanged(auth, user => {
       if (user) connectVotes(user);
       else signInAnonymously(auth).catch(error => {
         console.error('Firebase Anonymous Auth error:', error);
-        showStatus('Voting શરૂ થઈ શકતું નથી. Firebase Anonymous Authentication Enable કરો.');
+        showStatus(myVote ? `તમારી પસંદગી “${selectedLabel(myVote)}” સેવ છે. Firebase જોડાઈ શક્યું નથી.` : 'Voting શરૂ થઈ શકતું નથી. Firebase Anonymous Authentication Enable કરો.');
       });
     });
   </script>
